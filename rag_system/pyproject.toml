@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "rag-system"
+version = "0.1.0"
+description = ""
+authors = ["Germanifold <germanifold@outlook.com>"]
+readme = "README.md"
+packages = [{include = "rag_system", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+jupyter = "^1.0.0"
+ipykernel = "^6.29.4"
+pandas = "^2.2.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
