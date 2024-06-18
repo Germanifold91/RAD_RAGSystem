@@ -7,11 +7,21 @@ readme = "README.md"
 packages = [{include = "rag_system", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.9,<3.13"
 jupyter = "^1.0.0"
 ipykernel = "^6.29.4"
 pandas = "^2.2.2"
+langchain = "^0.2.3"
+langchain-community = "^0.2.4"
+tqdm = "^4.66.4"
+unstructured = "^0.14.5"
+markdown = "^3.6"
+chromadb = "^0.5.0"
+langchain-openai = "^0.1.8"
 
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.4.2"
 
 [build-system]
 requires = ["poetry-core"]
