@@ -7,10 +7,11 @@ import shutil
 from typing import List
 from langchain_community.document_loaders import DirectoryLoader
 from langchain_openai import OpenAIEmbeddings
-from langchain.document_loaders import UnstructuredMarkdownLoader
+from langchain.document_loaders import TextLoader
 from langchain.text_splitter import MarkdownHeaderTextSplitter
 from langchain.vectorstores.chroma import Chroma
 from langchain.schema.document import Document
+
 
 
 def get_embedding_function(embedding_model: str, **kwargs):
@@ -47,18 +48,18 @@ class DocumentManager:
             self.directory_path,
             glob=self.glob_pattern,
             show_progress=True,
-            loader_cls=UnstructuredMarkdownLoader,
+            loader_cls=TextLoader,
         )
         self.documents = loader.load()
 
     def split_documents(self) -> List[Document]:
         """ """
         headers_to_split_on = [("#", "Header 1"), ("##", "Header 2")]
-        text_splitter = MarkdownHeaderTextSplitter(
+        self.text_splitter = MarkdownHeaderTextSplitter(
             headers_to_split_on=headers_to_split_on, strip_headers=False
         )
         for doc in self.documents:
-            sections = text_splitter.split_text(doc.page_content)
+            sections = self.text_splitter.split_text(doc.page_content)
             for section in sections:
                 section.metadata["source"] = os.path.basename(doc.metadata["source"])
                 section.metadata["header"] = doc.page_content.split("\n")[0]
@@ -80,7 +81,7 @@ class DocumentManager:
         db.add_documents(chunks, ids=chunk_ids)
 
         print(
-            f"👉 Initial set of documents added: {len(chunks_with_ids)}\n📍 Chroma store created at: {self.chroma_path}"
+            f"👉 Initial set of chunks added to chroma store: {len(chunks_with_ids)}\n📍 Chroma store created at: {self.chroma_path}"
         )
 
     def calculate_chunk_ids(self, chunks: List[Document]) -> List[Document]:
@@ -116,7 +117,7 @@ class DocumentUpdater(DocumentManager):
             self.temp_directory,
             glob=self.glob_pattern,
             show_progress=True,
-            loader_cls=UnstructuredMarkdownLoader,
+            loader_cls=TextLoader,
         )
         self.documents = loader.load()
 
@@ -151,7 +152,7 @@ class DocumentUpdater(DocumentManager):
         if new_chunks:
             chunk_ids = [chunk.metadata["id"] for chunk in new_chunks]
             db.add_documents(new_chunks, ids=chunk_ids)
-            print(f"👉 Added {len(new_chunks)} new documents to the Chroma store.")
+            print(f"👉 Added {len(new_chunks)} new vectors to the Chroma store.")
 
             # Move new documents from temp directory to main directory
             self.move_temp_files_to_main_directory()
@@ -169,15 +170,12 @@ class DocumentUpdater(DocumentManager):
             destination_path = os.path.join(self.directory_path, filename)
             if os.path.isfile(source_path):
                 shutil.move(source_path, destination_path)
-                print(f"Moved {source_path} to {destination_path}")
+                print(f"🚚 Moved {os.path.basename(source_path)} to {self.directory_path}")
 
     def clear_temp_directory(self) -> None:
         """ """
         shutil.rmtree(self.temp_directory)
         self.temp_directory = tempfile.mkdtemp()
-        print(
-            f"Cleared temporary directory and created a new one: {self.temp_directory}"
-        )
 
     def upload_document(self, file_path: str) -> None:
         """Uploads a document to the temporary directory for processing"""
@@ -189,4 +187,3 @@ class DocumentUpdater(DocumentManager):
             self.temp_directory, os.path.basename(file_path)
         )
         shutil.copy(file_path, destination_path)
-        print(f"Uploaded {file_path} to temporary directory {self.temp_directory}")
