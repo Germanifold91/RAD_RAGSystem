@@ -38,7 +38,7 @@ class DocumentManager:
     """
     A class that manages loading, splitting, and storing documents.
 
-    The `DocumentManager` class provides methods to load documents from a specified directory, 
+    The `DocumentManager` class provides methods to load documents from a specified directory,
     split the documents into sections based on headers, and create a Chroma store to store the chunks of documents.
 
     Args:
@@ -162,10 +162,10 @@ class DocumentManager:
             chunk_id = f"{source}:{source_last_chunk_index[source]}"
             chunk.metadata["id"] = chunk_id
         return chunks
-    
+
 
 class DocumentUpdater(DocumentManager):
-    """ 
+    """
     A class that updates the document store with new documents.
 
     This class extends the `DocumentManager` class and provides methods to load temporary documents,
