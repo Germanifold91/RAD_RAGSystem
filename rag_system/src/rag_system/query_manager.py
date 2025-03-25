@@ -23,7 +23,7 @@ class ConversationalRetrievalAgent:
 
     def setup_conversational_chain(self):
         try:
-            retriever = self.vectordb.as_retriever(search_kwargs={"k": 4})
+            retriever = self.vectordb.as_retriever(search_kwargs={"k": 2})
             self.chain = ConversationalRetrievalChain.from_llm(
                 self.llm,
                 retriever,
