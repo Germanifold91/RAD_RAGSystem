@@ -5,6 +5,7 @@
 import os
 import tempfile
 import shutil
+import logging
 from typing import List
 from langchain_community.document_loaders import DirectoryLoader
 from langchain_openai import OpenAIEmbeddings
@@ -12,6 +13,8 @@ from langchain.document_loaders import TextLoader
 from langchain.text_splitter import MarkdownHeaderTextSplitter
 from langchain.vectorstores.chroma import Chroma
 from langchain.schema.document import Document
+
+LOGGER = logging.getLogger(__name__)
 
 
 def get_embedding_function(embedding_model: str, **kwargs):
@@ -136,8 +139,8 @@ class DocumentManager:
         chunks_with_ids = self.calculate_chunk_ids(chunks)
         chunk_ids = [chunk.metadata["id"] for chunk in chunks_with_ids]
         db.add_documents(chunks, ids=chunk_ids)
-
-        print(
+        
+        LOGGER.info(
             f"👉 Initial set of chunks added to chroma store: {len(chunks_with_ids)}\n📍 Chroma store created at: {self.chroma_path}"
         )
 
@@ -258,13 +261,13 @@ class DocumentUpdater(DocumentManager):
         if new_chunks:
             chunk_ids = [chunk.metadata["id"] for chunk in new_chunks]
             db.add_documents(new_chunks, ids=chunk_ids)
-            print(f"👉 Added {len(new_chunks)} new vectors to the Chroma store.")
+            LOGGER.info(f"👉 Added {len(new_chunks)} new vectors to the Chroma store.")
 
             # Move new documents from temp directory to main directory
             self.move_temp_files_to_main_directory()
 
         else:
-            print("✅ No new documents to add.")
+            LOGGER.info("✅ No new documents to add.")
 
         # Clear the temporary directory
         self.clear_temp_directory()
@@ -290,7 +293,7 @@ class DocumentUpdater(DocumentManager):
             destination_path = os.path.join(self.directory_path, filename)
             if os.path.isfile(source_path):
                 shutil.move(source_path, destination_path)
-                print(
+                LOGGER.info(
                     f"🚚 Moved {os.path.basename(source_path)} to {self.directory_path}"
                 )
 
@@ -322,7 +325,7 @@ class DocumentUpdater(DocumentManager):
 
         """
         if not os.path.isfile(file_path):
-            print(f"File not found: {file_path}")
+            LOGGER.info(f"File not found: {file_path}")
             return
 
         destination_path = os.path.join(
