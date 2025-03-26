@@ -6,10 +6,11 @@ import os
 import tempfile
 import shutil
 import logging
+import glob
 from typing import List
 from langchain_community.document_loaders import DirectoryLoader
 from langchain_openai import OpenAIEmbeddings
-from langchain.document_loaders import TextLoader
+from langchain.document_loaders import TextLoader, PyPDFLoader
 from langchain.text_splitter import MarkdownHeaderTextSplitter
 from langchain.vectorstores.chroma import Chroma
 from langchain.schema.document import Document
@@ -81,21 +82,24 @@ class DocumentManager:
 
     def load_documents(self) -> None:
         """
-        Load documents from the specified directory path using the given glob pattern.
-
-        This method initializes a `DirectoryLoader` object with the directory path and glob pattern provided.
-        It then uses the `TextLoader` class as the loader class for loading the documents.
-
-        Returns:
-            None
+        Loads documents of supported formats (Markdown, PDF) from the directory.
         """
-        loader = DirectoryLoader(
-            self.directory_path,
-            glob=self.glob_pattern,
-            show_progress=True,
-            loader_cls=TextLoader,
-        )
-        self.documents = loader.load()
+        all_files = glob.glob(os.path.join(self.directory_path, self.glob_pattern))
+        docs = []
+
+        for file_path in all_files:
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext == ".md":
+                loader = TextLoader(file_path)
+            elif ext == ".pdf":
+                loader = PyPDFLoader(file_path)
+            else:
+                print(f"Skipping unsupported file: {file_path}")
+                continue
+
+            docs.extend(loader.load())
+
+        self.documents = docs
 
     def split_documents(self) -> List[Document]:
         """
