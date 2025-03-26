@@ -8,10 +8,9 @@ import shutil
 import logging
 import glob
 from typing import List
-from langchain_community.document_loaders import DirectoryLoader
 from langchain_openai import OpenAIEmbeddings
 from langchain.document_loaders import TextLoader, PyPDFLoader
-from langchain.text_splitter import MarkdownHeaderTextSplitter
+from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from langchain.vectorstores.chroma import Chroma
 from langchain.schema.document import Document
 
@@ -70,7 +69,7 @@ class DocumentManager:
         self,
         directory_path: str,
         chroma_path: str,
-        glob_pattern: str = "./*.md",
+        glob_pattern: str = "*.*",
         embedding_model: str = "openai",
     ) -> None:
         self.directory_path = directory_path
@@ -103,22 +102,31 @@ class DocumentManager:
 
     def split_documents(self) -> List[Document]:
         """
-        Splits the documents into sections based on specified headers.
-
-        Returns a list of sections containing the split content.
-
-        :return: A list of sections.
-        :rtype: List[Document]
+        Splits loaded documents into chunks.
+        Markdown files are split by headers.
+        PDFs and other formats are split recursively.
         """
-        headers_to_split_on = [("#", "Header 1"), ("##", "Header 2")]
-        self.text_splitter = MarkdownHeaderTextSplitter(
-            headers_to_split_on=headers_to_split_on, strip_headers=False
-        )
         for doc in self.documents:
-            sections = self.text_splitter.split_text(doc.page_content)
-            for section in sections:
-                section.metadata["source"] = os.path.basename(doc.metadata["source"])
-                section.metadata["header"] = doc.page_content.split("\n")[0]
+            filename = os.path.basename(doc.metadata.get("source", "unknown"))
+
+            if filename.endswith(".md"):
+                splitter = MarkdownHeaderTextSplitter(
+                    headers_to_split_on=[("#", "Header 1"), ("##", "Header 2")],
+                    strip_headers=False
+                )
+                sections = splitter.split_text(doc.page_content)
+                for section in sections:
+                    section.metadata["source"] = filename
+                    section.metadata["header"] = doc.page_content.split("\n")[0]
+            else:
+                splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=500,
+                    chunk_overlap=100
+                )
+                sections = splitter.create_documents([doc.page_content], metadatas=[doc.metadata])
+                for section in sections:
+                    section.metadata["source"] = filename
+
             self.all_sections.extend(sections)
 
         return self.all_sections
@@ -216,13 +224,22 @@ class DocumentUpdater(DocumentManager):
         Returns:
             None
         """
-        loader = DirectoryLoader(
-            self.temp_directory,
-            glob=self.glob_pattern,
-            show_progress=True,
-            loader_cls=TextLoader,
-        )
-        self.documents = loader.load()
+        all_files = glob.glob(os.path.join(self.directory_path, self.glob_pattern))
+        docs = []
+
+        for file_path in all_files:
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext == ".md":
+                loader = TextLoader(file_path)
+            elif ext == ".pdf":
+                loader = PyPDFLoader(file_path)
+            else:
+                print(f"Skipping unsupported file: {file_path}")
+                continue
+
+            docs.extend(loader.load())
+
+        self.documents = docs
 
     def update_chroma_store(self) -> None:
         """
