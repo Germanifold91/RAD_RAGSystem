@@ -57,7 +57,7 @@ st.subheader("📤 Upload Documents")
 uploaded_files = st.file_uploader(
     "Choose documents:",
     accept_multiple_files=True,
-    type=['md', 'txt', 'pdf', 'docx']
+    type=['md', 'pdf']
 )
 
 # Set paths
