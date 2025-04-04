@@ -71,34 +71,59 @@ class DocumentManager:
         chroma_path: str,
         glob_pattern: str = "*.*",
         embedding_model: str = "openai",
+        
     ) -> None:
         self.directory_path = directory_path
         self.chroma_path = chroma_path
         self.glob_pattern = glob_pattern
         self.embedding_model = embedding_model
+        self.loader_map = {
+            ".md": TextLoader,
+            ".pdf": PyPDFLoader
+        }
         self.documents = []
         self.all_sections = []
 
     def load_documents(self) -> None:
         """
-        Loads documents of supported formats (Markdown, PDF) from the directory.
+        Loads supported documents from the directory into memory.
+
+        Supported formats:
+            - Markdown (.md)
+            - PDF (.pdf)
+
+        Files with unsupported extensions are skipped with a warning.
+        Any errors during document loading are logged without interrupting the process.
+
+        Side Effects:
+            Populates `self.documents` with loaded document objects.
+
+        Raises:
+            None
+
+        Logs:
+            - Number of documents loaded
+            - Any skipped or failed files
         """
-        all_files = glob.glob(os.path.join(self.directory_path, self.glob_pattern))
+        all_files = glob.glob(os.path.join(self.directory_path, self.glob_pattern), recursive=True)
         docs = []
 
         for file_path in all_files:
             ext = os.path.splitext(file_path)[1].lower()
-            if ext == ".md":
-                loader = TextLoader(file_path)
-            elif ext == ".pdf":
-                loader = PyPDFLoader(file_path)
-            else:
-                print(f"Skipping unsupported file: {file_path}")
+            loader_cls = self.loader_map.get(ext)
+
+            if not loader_cls:
+                logging.warning(f"Skipping unsupported file: {file_path}")
                 continue
 
-            docs.extend(loader.load())
+            try:
+                loader = loader_cls(file_path)
+                docs.extend(loader.load())
+            except Exception as e:
+                logging.error(f"Error loading {file_path}: {e}")
 
         self.documents = docs
+        logging.info(f"Successfully loaded {len(docs)} documents.")
 
     def split_documents(self) -> List[Document]:
         """
