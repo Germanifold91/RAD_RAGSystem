@@ -127,10 +127,27 @@ class DocumentManager:
 
     def split_documents(self) -> List[Document]:
         """
-        Splits loaded documents into chunks.
-        Markdown files are split by headers.
-        PDFs and other formats are split recursively.
+        Splits loaded documents into smaller, semantically meaningful chunks.
+
+        Markdown files (`.md`) are split using header-based segmentation with `MarkdownHeaderTextSplitter`,
+        preserving header context in metadata.
+
+        PDFs and other file formats are split using recursive character-based chunking with overlap.
+
+        Returns:
+            List[Document]: A list of chunked documents with enriched metadata.
+
+        Raises:
+            ValueError: If `self.documents` is empty or not loaded.
+
+        Side Effects:
+            Resets and repopulates `self.all_sections` with the newly created chunks.
         """
+        if not self.documents:
+            raise ValueError("No documents to split. Please load documents first.")
+
+        all_sections = []  # Fresh list to avoid state contamination
+
         for doc in self.documents:
             filename = os.path.basename(doc.metadata.get("source", "unknown"))
 
@@ -140,6 +157,7 @@ class DocumentManager:
                     strip_headers=False
                 )
                 sections = splitter.split_text(doc.page_content)
+
                 for section in sections:
                     section.metadata["source"] = filename
                     section.metadata["header"] = doc.page_content.split("\n")[0]
@@ -148,13 +166,18 @@ class DocumentManager:
                     chunk_size=500,
                     chunk_overlap=100
                 )
-                sections = splitter.create_documents([doc.page_content], metadatas=[doc.metadata])
+                sections = splitter.create_documents(
+                    [doc.page_content],
+                    metadatas=[doc.metadata]
+                )
                 for section in sections:
                     section.metadata["source"] = filename
 
-            self.all_sections.extend(sections)
+            all_sections.extend(sections)
 
-        return self.all_sections
+        self.all_sections = all_sections  # Safe assignment at the end
+        logging.info(f"Split {len(self.documents)} documents into {len(all_sections)} chunks.")
+        return all_sections
 
     def create_chroma_store(self, chunks: List[Document]) -> None:
         """
