@@ -10,7 +10,10 @@ import glob
 from typing import List
 from langchain_openai import OpenAIEmbeddings
 from langchain.document_loaders import TextLoader, PyPDFLoader
-from langchain.text_splitter import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
+from langchain.text_splitter import (
+    MarkdownHeaderTextSplitter,
+    RecursiveCharacterTextSplitter,
+)
 from langchain.vectorstores.chroma import Chroma
 from langchain.schema.document import Document
 
@@ -71,16 +74,12 @@ class DocumentManager:
         chroma_path: str,
         glob_pattern: str = "*.*",
         embedding_model: str = "openai",
-        
     ) -> None:
         self.directory_path = directory_path
         self.chroma_path = chroma_path
         self.glob_pattern = glob_pattern
         self.embedding_model = embedding_model
-        self.loader_map = {
-            ".md": TextLoader,
-            ".pdf": PyPDFLoader
-        }
+        self.loader_map = {".md": TextLoader, ".pdf": PyPDFLoader}
         self.documents = []
         self.all_sections = []
 
@@ -105,7 +104,9 @@ class DocumentManager:
             - Number of documents loaded
             - Any skipped or failed files
         """
-        all_files = glob.glob(os.path.join(self.directory_path, self.glob_pattern), recursive=True)
+        all_files = glob.glob(
+            os.path.join(self.directory_path, self.glob_pattern), recursive=True
+        )
         docs = []
 
         for file_path in all_files:
@@ -154,7 +155,7 @@ class DocumentManager:
             if filename.endswith(".md"):
                 splitter = MarkdownHeaderTextSplitter(
                     headers_to_split_on=[("#", "Header 1"), ("##", "Header 2")],
-                    strip_headers=False
+                    strip_headers=False,
                 )
                 sections = splitter.split_text(doc.page_content)
 
@@ -163,12 +164,10 @@ class DocumentManager:
                     section.metadata["header"] = doc.page_content.split("\n")[0]
             else:
                 splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=500,
-                    chunk_overlap=100
+                    chunk_size=500, chunk_overlap=100
                 )
                 sections = splitter.create_documents(
-                    [doc.page_content],
-                    metadatas=[doc.metadata]
+                    [doc.page_content], metadatas=[doc.metadata]
                 )
                 for section in sections:
                     section.metadata["source"] = filename
@@ -176,34 +175,11 @@ class DocumentManager:
             all_sections.extend(sections)
 
         self.all_sections = all_sections  # Safe assignment at the end
-        logging.info(f"Split {len(self.documents)} documents into {len(all_sections)} chunks.")
+        logging.info(
+            f"Split {len(self.documents)} documents into {len(all_sections)} chunks."
+        )
         return all_sections
-
-    def create_chroma_store(self, chunks: List[Document]) -> None:
-        """
-        Create a Chroma store and add the initial set of chunks to it.
-
-        Args:
-            chunks (List[Document]): The list of chunks to be added to the Chroma store.
-
-        Returns:
-            None
-        """
-        db = Chroma(
-            persist_directory=self.chroma_path,
-            embedding_function=get_embedding_function(
-                embedding_model=self.embedding_model
-            ),
-        )
-
-        chunks_with_ids = self.calculate_chunk_ids(chunks)
-        chunk_ids = [chunk.metadata["id"] for chunk in chunks_with_ids]
-        db.add_documents(chunks, ids=chunk_ids)
-        
-        LOGGER.info(
-            f"👉 Initial set of chunks added to chroma store: {len(chunks_with_ids)}\n📍 Chroma store created at: {self.chroma_path}"
-        )
-
+    
     def calculate_chunk_ids(self, chunks: List[Document]) -> List[Document]:
         """
         Calculates and assigns unique IDs to each chunk in the given list of documents.
@@ -225,6 +201,45 @@ class DocumentManager:
             chunk_id = f"{source}:{source_last_chunk_index[source]}"
             chunk.metadata["id"] = chunk_id
         return chunks
+
+    def create_chroma_store(self, chunks: List[Document]) -> None:
+        """
+        Creates a Chroma vector store at the specified path and adds the provided document chunks.
+
+        Each chunk is assigned a unique ID before being added to the store.
+
+        Args:
+            chunks (List[Document]): The list of document chunks to be embedded and stored.
+
+        Returns:
+            None
+
+        Raises:
+            FileExistsError: If a Chroma store already exists at `self.chroma_path`.
+        
+        Logs:
+            - Number of chunks added
+            - Chroma DB creation path
+        """
+        if os.path.exists(self.chroma_path):
+            raise FileExistsError(
+                f"Chroma store already exists at {self.chroma_path}. Aborting to prevent overwrite."
+            )
+
+        db = Chroma(
+            persist_directory=self.chroma_path,
+            embedding_function=get_embedding_function(
+                embedding_model=self.embedding_model
+            ),
+        )
+
+        chunks_with_ids = self.calculate_chunk_ids(chunks)
+        chunk_ids = [chunk.metadata["id"] for chunk in chunks_with_ids]
+        db.add_documents(chunks_with_ids, ids=chunk_ids)
+
+        LOGGER.info(
+            f"👉 Initial set of chunks added to Chroma store: {len(chunks_with_ids)}\n📍 Chroma store created at: {self.chroma_path}"
+        )
 
 
 class DocumentUpdater(DocumentManager):
