@@ -7,6 +7,7 @@ import tempfile
 import shutil
 import logging
 import glob
+from collections import defaultdict
 from typing import List
 from langchain_openai import OpenAIEmbeddings
 from langchain.document_loaders import TextLoader, PyPDFLoader
@@ -182,24 +183,30 @@ class DocumentManager:
     
     def calculate_chunk_ids(self, chunks: List[Document]) -> List[Document]:
         """
-        Calculates and assigns unique IDs to each chunk in the given list of documents.
+        Assigns unique IDs to each document chunk based on its source filename and position.
+
+        The ID format is: `<source>:<index>`, where index is incremented per source file.
 
         Args:
-            chunks (List[Document]): A list of Document objects representing chunks.
+            chunks (List[Document]): A list of Document chunks with metadata that includes 'source'.
 
         Returns:
-            List[Document]: A list of Document objects with assigned chunk IDs.
+            List[Document]: The same list of Document chunks with a new "id" key in metadata.
 
+        Raises:
+            ValueError: If a chunk is missing the 'source' metadata field.
         """
-        source_last_chunk_index = {}
+        source_last_chunk_index = defaultdict(int)
+
         for chunk in chunks:
             source = chunk.metadata.get("source")
-            if source not in source_last_chunk_index:
-                source_last_chunk_index[source] = 0
-            else:
-                source_last_chunk_index[source] += 1
+            if not source:
+                raise ValueError("Document chunk is missing 'source' metadata.")
+
+            source_last_chunk_index[source] += 1
             chunk_id = f"{source}:{source_last_chunk_index[source]}"
             chunk.metadata["id"] = chunk_id
+
         return chunks
 
     def create_chroma_store(self, chunks: List[Document]) -> None:
