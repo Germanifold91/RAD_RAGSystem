@@ -357,19 +357,25 @@ class DocumentUpdater(DocumentManager):
                 except Exception as e:
                     LOGGER.error(f"❌ Failed to move {entry.name}: {e}")
 
-
     def clear_temp_directory(self) -> None:
         """
         Clears the temporary directory used by the Vecstore Manager.
 
         This method deletes all files and subdirectories within the temporary directory
-        and creates a new empty temporary directory.
+        and creates a new empty one, updating `self.temp_directory`.
 
         Returns:
             None
+
+        Logs:
+            - Successful clearing and recreation of the directory.
         """
-        shutil.rmtree(self.temp_directory)
+        if os.path.exists(self.temp_directory):
+            shutil.rmtree(self.temp_directory)
+            LOGGER.info(f"🗑️ Removed existing temp directory: {self.temp_directory}")
+
         self.temp_directory = tempfile.mkdtemp()
+        LOGGER.info(f"🧹 Created new temp directory: {self.temp_directory}")
 
     def update_chroma_store(self) -> int:
         """
