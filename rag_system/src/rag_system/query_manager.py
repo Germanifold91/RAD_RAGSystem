@@ -5,7 +5,10 @@ basic error handling, and additional debugging and runtime methods.
 
 from langchain_openai import OpenAI
 from langchain.chains import ConversationalRetrievalChain
+from typing import List, Tuple
 import logging
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ConversationalRetrievalAgent:
@@ -15,11 +18,20 @@ class ConversationalRetrievalAgent:
         self.chat_history = []
         self.setup_conversational_chain()
 
-    def format_chat_history(self, history):
-        formatted_history = []
+    def format_chat_history(self, history: List[Tuple[str, str]]) -> str:
+        """
+        Formats chat history into a string suitable for prompt injection.
+
+        Args:
+            history (List[Tuple[str, str]]): A list of (human, ai) message pairs.
+
+        Returns:
+            str: A formatted string representing the full conversation.
+        """
+        formatted = []
         for human, ai in history:
-            formatted_history.append(f"Human: {human}\nAI: {ai}")
-        return "\n".join(formatted_history)
+            formatted.append(f"Human: {human}\nAI: {ai}")
+        return "\n".join(formatted)
 
     def setup_conversational_chain(self):
         try:
