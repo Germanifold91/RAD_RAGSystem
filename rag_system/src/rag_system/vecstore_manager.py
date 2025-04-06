@@ -278,38 +278,51 @@ class DocumentUpdater(DocumentManager):
         self,
         directory_path: str,
         chroma_path: str,
-        glob_pattern: str = "./*.md",
+        glob_pattern: str = "*.*",
         embedding_model: str = "openai",
+        loader_map: dict = None,
     ) -> None:
-        super().__init__(directory_path, chroma_path, glob_pattern, embedding_model)
+        super().__init__(directory_path, chroma_path, glob_pattern, embedding_model, loader_map)
         self.temp_directory = tempfile.mkdtemp()
 
     def load_temp_documents(self) -> None:
         """
-        Loads temporary documents from the specified directory using the DirectoryLoader class.
+        Loads supported temporary documents from the temporary directory into memory.
 
-        This method initializes a DirectoryLoader with the given temporary directory, glob pattern,
-        and TextLoader class. It then uses the loader to load the documents from the directory.
+        This method reads files from `self.temp_directory` using glob and loads them
+        using appropriate document loaders (Markdown or PDF). Unsupported file formats
+        are skipped with a warning. Loaded documents are stored in `self.documents`.
 
-        Returns:
+        Raises:
             None
+
+        Side Effects:
+            Sets `self.documents` with the list of loaded Document objects.
+
+        Logs:
+            - Skipped unsupported file types
+            - Any loading errors
+            - Total number of documents loaded
         """
-        all_files = glob.glob(os.path.join(self.directory_path, self.glob_pattern))
+        all_files = glob.glob(os.path.join(self.temp_directory, self.glob_pattern))
         docs = []
 
         for file_path in all_files:
             ext = os.path.splitext(file_path)[1].lower()
-            if ext == ".md":
-                loader = TextLoader(file_path)
-            elif ext == ".pdf":
-                loader = PyPDFLoader(file_path)
-            else:
-                print(f"Skipping unsupported file: {file_path}")
+            loader_cls = self.loader_map.get(ext)
+
+            if not loader_cls:
+                logging.warning(f"Skipping unsupported file: {file_path}")
                 continue
 
-            docs.extend(loader.load())
+            try:
+                loader = loader_cls(file_path)
+                docs.extend(loader.load())
+            except Exception as e:
+                logging.error(f"Failed to load {file_path}: {e}")
 
         self.documents = docs
+        logging.info(f"Loaded {len(docs)} documents from temp directory.")
 
     def update_chroma_store(self) -> None:
         """
