@@ -5,6 +5,7 @@ basic error handling, and additional debugging and runtime methods.
 
 from langchain_openai import OpenAI
 from langchain.chains import ConversationalRetrievalChain
+from langchain.vectorstores.chroma import Chroma
 from typing import List, Tuple
 import logging
 
@@ -12,10 +13,11 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ConversationalRetrievalAgent:
-    def __init__(self, vectordb, temperature=0.5):
+    def __init__(self, vectordb: Chroma, temperature: float = 0.5, k: int = 2):
         self.vectordb = vectordb
         self.llm = OpenAI(temperature=temperature)
         self.chat_history = []
+        self.key = k
         self.setup_conversational_chain()
 
     def format_chat_history(self, history: List[Tuple[str, str]]) -> str:
@@ -33,17 +35,33 @@ class ConversationalRetrievalAgent:
             formatted.append(f"Human: {human}\nAI: {ai}")
         return "\n".join(formatted)
 
-    def setup_conversational_chain(self):
+    def setup_conversational_chain(self) -> None:
+        """
+        Sets up the Conversational Retrieval Chain using the provided vectorstore and LLM.
+
+        This chain:
+            - Retrieves top-k chunks from the vectorstore for each query
+            - Includes chat history in the prompt
+            - Returns both the generated answer and the source documents
+
+        Raises:
+            ValueError: If the vectorstore is not available.
+            Exception: If chain setup fails.
+        """
+        if not self.vectordb:
+            raise ValueError("Vectorstore is not initialized.")
+
         try:
-            retriever = self.vectordb.as_retriever(search_kwargs={"k": 2})
+            retriever = self.vectordb.as_retriever(search_kwargs={"k": self.k})
             self.chain = ConversationalRetrievalChain.from_llm(
                 self.llm,
                 retriever,
                 return_source_documents=True,
                 get_chat_history=self.format_chat_history,
             )
+            logging.info("✅ Conversational chain initialized successfully.")
         except Exception as e:
-            logging.error(f"Failed to initialize conversational chain: {e}")
+            logging.error(f"❌ Failed to initialize conversational chain: {e}")
             raise
 
     def generate_prompt(self, question):
@@ -87,7 +105,7 @@ class ConversationalRetrievalAgent:
         """Retrieves source documents using the retriever with updated method."""
         try:
             retriever = self.vectordb.as_retriever(search_kwargs={"k": 2})
-            docs = retriever.invoke(query)  
+            docs = retriever.invoke(query)
             return docs
         except Exception as e:
             logging.error(f"Failed to retrieve source documents: {e}")
