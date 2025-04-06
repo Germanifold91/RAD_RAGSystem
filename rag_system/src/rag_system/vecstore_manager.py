@@ -455,6 +455,8 @@ class DocumentUpdater(DocumentManager):
         """
         Uploads a document from the specified file path to the temporary directory.
 
+        This copies the file into `self.temp_directory` so it can be processed and embedded.
+
         Args:
             file_path (str): The path of the file to be uploaded.
 
@@ -464,12 +466,21 @@ class DocumentUpdater(DocumentManager):
         Raises:
             None
 
+        Logs:
+            - Warns if the file doesn't exist
+            - Info when the file is successfully copied
         """
         if not os.path.isfile(file_path):
-            LOGGER.info(f"File not found: {file_path}")
+            LOGGER.warning(f"🚫 File not found or not a regular file: {file_path}")
             return
 
         destination_path = os.path.join(
             self.temp_directory, os.path.basename(file_path)
         )
-        shutil.copy(file_path, destination_path)
+
+        try:
+            shutil.copy(file_path, destination_path)
+            LOGGER.info(f"📥 Uploaded document to temp directory: {destination_path}")
+        except Exception as e:
+            LOGGER.error(f"❌ Failed to upload {file_path} to temp directory: {e}")
+
