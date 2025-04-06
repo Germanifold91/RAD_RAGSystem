@@ -280,7 +280,7 @@ class DocumentUpdater(DocumentManager):
         chroma_path: str,
         glob_pattern: str = "*.*",
         embedding_model: str = "openai",
-        loader_map: dict = None,
+        loader_map: dict = {".md": TextLoader, ".pdf": PyPDFLoader},
     ) -> None:
         super().__init__(directory_path, chroma_path, glob_pattern, embedding_model, loader_map)
         self.temp_directory = tempfile.mkdtemp()
@@ -324,82 +324,39 @@ class DocumentUpdater(DocumentManager):
         self.documents = docs
         logging.info(f"Loaded {len(docs)} documents from temp directory.")
 
-    def update_chroma_store(self) -> None:
-        """
-        Update the Chroma store with new documents.
-
-        This method loads and splits documents from the temporary folder, calculates chunk IDs,
-        and adds new documents to the Chroma store if they don't already exist. It also moves
-        new documents from the temporary directory to the main directory and clears the temporary
-        directory afterwards.
-
-        Returns:
-            None
-        """
-        # Load and split documents from the temporary folder
-        self.load_temp_documents()
-        chunks = self.split_documents()
-
-        # Load the existing database
-        db = Chroma(
-            persist_directory=self.chroma_path,
-            embedding_function=get_embedding_function(
-                embedding_model=self.embedding_model
-            ),
-        )
-
-        # Calculate chunk IDs
-        chunks_with_ids = self.calculate_chunk_ids(chunks)
-
-        # Get existing IDs from the database
-        existing_items = db.get()  # IDs are always included by default
-        existing_ids = set(existing_items["ids"])
-
-        # Only add documents that don't exist in the DB
-        new_chunks = [
-            chunk
-            for chunk in chunks_with_ids
-            if chunk.metadata["id"] not in existing_ids
-        ]
-
-        if new_chunks:
-            chunk_ids = [chunk.metadata["id"] for chunk in new_chunks]
-            db.add_documents(new_chunks, ids=chunk_ids)
-            LOGGER.info(f"👉 Added {len(new_chunks)} new vectors to the Chroma store.")
-
-            # Move new documents from temp directory to main directory
-            self.move_temp_files_to_main_directory()
-
-        else:
-            LOGGER.info("✅ No new documents to add.")
-
-        # Clear the temporary directory
-        self.clear_temp_directory()
-
     def move_temp_files_to_main_directory(self) -> None:
-        """Move temporary files to the main directory.
+        """
+        Moves all files from the temporary directory to the main directory.
 
-        This method moves all the files from the temporary directory to the main directory.
-        It iterates over each file in the temporary directory, checks if it is a file, and then
-        moves it to the destination path in the main directory.
+        For each file in the temporary directory:
+            - Checks if it's a regular file (not a directory)
+            - Moves it to the main directory
+            - Logs the result
 
-        Note:
-            - The source path is the path of the file in the temporary directory.
-            - The destination path is the path where the file will be moved in the main directory.
+        Notes:
+            - Ensures the destination directory exists
+            - Logs success or failure for each file
 
         Raises:
-            - FileNotFoundError: If the temporary directory or any of the files in it does not exist.
-            - PermissionError: If there is a permission error while moving the files.
-
+            FileNotFoundError: If the temporary directory doesn't exist.
+            PermissionError: If a file cannot be moved due to permissions.
         """
-        for filename in os.listdir(self.temp_directory):
-            source_path = os.path.join(self.temp_directory, filename)
-            destination_path = os.path.join(self.directory_path, filename)
-            if os.path.isfile(source_path):
-                shutil.move(source_path, destination_path)
-                LOGGER.info(
-                    f"🚚 Moved {os.path.basename(source_path)} to {self.directory_path}"
-                )
+        if not os.path.exists(self.temp_directory):
+            raise FileNotFoundError(f"Temporary directory not found: {self.temp_directory}")
+
+        os.makedirs(self.directory_path, exist_ok=True)
+
+        for entry in os.scandir(self.temp_directory):
+            if entry.is_file():
+                source_path = entry.path
+                destination_path = os.path.join(self.directory_path, entry.name)
+
+                try:
+                    shutil.move(source_path, destination_path)
+                    LOGGER.info(f"🚚 Moved {entry.name} to {self.directory_path}")
+                except Exception as e:
+                    LOGGER.error(f"❌ Failed to move {entry.name}: {e}")
+
 
     def clear_temp_directory(self) -> None:
         """
@@ -413,6 +370,80 @@ class DocumentUpdater(DocumentManager):
         """
         shutil.rmtree(self.temp_directory)
         self.temp_directory = tempfile.mkdtemp()
+
+    def update_chroma_store(self) -> int:
+        """
+        Updates the Chroma vector store with new documents from the temporary directory.
+
+        This method:
+            - Loads and splits temporary documents
+            - Assigns unique chunk IDs
+            - Adds only new (non-duplicate) chunks to the Chroma store
+            - Moves processed documents to the main directory
+            - Clears the temporary directory
+
+        Returns:
+            int: The number of new chunks added to the Chroma store.
+
+        Logs:
+            - Number of chunks loaded, filtered, and added
+            - Skipped duplicates
+            - Whether new files were moved or temp folder was cleared
+
+        Raises:
+            Exception: Propagates any unrecoverable errors during Chroma access or file I/O
+        """
+        try:
+            # Step 1: Load and split new documents
+            self.load_temp_documents()
+            chunks = self.split_documents()
+            LOGGER.info(f"📄 Loaded and split {len(chunks)} chunks from temp documents.")
+
+            # Step 2: Load existing Chroma DB
+            db = Chroma(
+                persist_directory=self.chroma_path,
+                embedding_function=get_embedding_function(
+                    embedding_model=self.embedding_model
+                ),
+            )
+
+            # Step 3: Assign unique chunk IDs
+            chunks_with_ids = self.calculate_chunk_ids(chunks)
+
+            # Step 4: Get existing IDs from DB
+            existing_ids = set(db.get()["ids"])
+            LOGGER.info(f"📦 Chroma currently holds {len(existing_ids)} vectors.")
+
+            # Step 5: Filter out already-indexed chunks
+            new_chunks = [
+                chunk for chunk in chunks_with_ids
+                if chunk.metadata["id"] not in existing_ids
+            ]
+
+            if new_chunks:
+                chunk_ids = [chunk.metadata["id"] for chunk in new_chunks]
+                db.add_documents(new_chunks, ids=chunk_ids)
+
+                LOGGER.info(
+                    f"✅ Added {len(new_chunks)} new chunks to Chroma store."
+                )
+
+                # Step 6: Move source files to main directory
+                self.move_temp_files_to_main_directory()
+                LOGGER.info("📂 Moved processed documents to main directory.")
+
+            else:
+                LOGGER.info("👍 No new chunks to add. All documents were already indexed.")
+
+            # Step 7: Clean up
+            self.clear_temp_directory()
+            LOGGER.info("🧹 Temporary directory cleared.")
+
+            return len(new_chunks)
+
+        except Exception as e:
+            LOGGER.error(f"❌ Failed to update Chroma store: {e}")
+            raise
 
     def upload_document(self, file_path: str) -> None:
         """
