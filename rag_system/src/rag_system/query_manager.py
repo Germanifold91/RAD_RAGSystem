@@ -13,7 +13,12 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ConversationalRetrievalAgent:
-    def __init__(self, vectordb: Chroma, temperature: float = 0.5, k: int = 2):
+    def __init__(
+        self, 
+        vectordb: Chroma, 
+        temperature: float = 0.5, 
+        k: int = 2
+    ) -> None:
         self.vectordb = vectordb
         self.llm = OpenAI(temperature=temperature)
         self.chat_history = []
