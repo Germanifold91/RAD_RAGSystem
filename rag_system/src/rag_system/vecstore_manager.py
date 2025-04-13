@@ -210,29 +210,21 @@ class DocumentManager:
         return chunks
 
     def create_chroma_store(self, chunks: List[Document]) -> None:
-        """
-        Creates a Chroma vector store at the specified path and adds the provided document chunks.
+        """Creates and persists a Chroma vector store from the provided document chunks.
 
-        Each chunk is assigned a unique ID before being added to the store.
+        Each chunk is assigned a unique ID before being added to the store. The resulting
+        vector store is persisted at the location defined by `self.chroma_path`.
 
         Args:
-            chunks (List[Document]): The list of document chunks to be embedded and stored.
+            chunks (List[Document]): The list of document chunks to embed and store.
 
         Returns:
             None
 
-        Raises:
-            FileExistsError: If a Chroma store already exists at `self.chroma_path`.
-        
         Logs:
-            - Number of chunks added
-            - Chroma DB creation path
+            - Number of chunks added to the store.
+            - Store location on disk.
         """
-        if os.path.exists(self.chroma_path):
-            raise FileExistsError(
-                f"Chroma store already exists at {self.chroma_path}. Aborting to prevent overwrite."
-            )
-
         db = Chroma(
             persist_directory=self.chroma_path,
             embedding_function=get_embedding_function(
@@ -242,10 +234,12 @@ class DocumentManager:
 
         chunks_with_ids = self.calculate_chunk_ids(chunks)
         chunk_ids = [chunk.metadata["id"] for chunk in chunks_with_ids]
-        db.add_documents(chunks_with_ids, ids=chunk_ids)
+        db.add_documents(chunks, ids=chunk_ids)
+
+        db.persist()
 
         LOGGER.info(
-            f"👉 Initial set of chunks added to Chroma store: {len(chunks_with_ids)}\n📍 Chroma store created at: {self.chroma_path}"
+            f"👉 Initial set of chunks added to chroma store: {len(chunks_with_ids)}\n📍 Chroma store created at: {self.chroma_path}"
         )
 
 
