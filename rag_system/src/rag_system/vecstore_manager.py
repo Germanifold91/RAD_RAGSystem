@@ -236,8 +236,6 @@ class DocumentManager:
         chunk_ids = [chunk.metadata["id"] for chunk in chunks_with_ids]
         db.add_documents(chunks, ids=chunk_ids)
 
-        db.persist()
-
         LOGGER.info(
             f"👉 Initial set of chunks added to chroma store: {len(chunks_with_ids)}\n📍 Chroma store created at: {self.chroma_path}"
         )
