@@ -1,6 +1,26 @@
+"""
+Streamlit Application: RAG Document Assistant
+
+This web-based application enables users to upload documents, process them into vector embeddings,
+and interact with a Retrieval-Augmented Generation (RAG) system powered by OpenAI's language models.
+
+Main Features:
+- API Key input for secure OpenAI access
+- Document uploader for various file types
+- Chroma vector store backend integration
+- LLM-powered question answering with context
+- Source document traceability for transparency
+"""
+
 import streamlit as st
+# DocumentManager handles document ingestion, splitting, and persistence into a Chroma vector store.
+# It abstracts the logic for loading raw files, transforming them into sections, and embedding them.
 from vecstore_manager import DocumentManager
+
+# ConversationalRetrievalAgent handles the interaction between the user query, the retriever, and the LLM.
+# It connects to the Chroma vector store and formats context-aware prompts for generating LLM responses.
 from query_manager import ConversationalRetrievalAgent
+
 import tempfile
 import os
 from pathlib import Path
@@ -106,6 +126,10 @@ elif uploaded_files and not api_key:
 st.subheader("💬 Ask a Question")
 question = st.text_input("What would you like to know?")
 
+# When the user submits a question:
+# - Use the ConversationalRetrievalAgent to generate a response
+# - Retrieve and display the source documents used by the retriever
+# - Present both the response and the sources clearly in the UI
 if question:
     if st.session_state.agent:
         with st.spinner("Generating response..."):
